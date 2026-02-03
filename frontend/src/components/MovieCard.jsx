@@ -1,0 +1,155 @@
+import React, { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Heart, Download, Play, Eye } from 'lucide-react'
+import { useWatchlist } from '../contexts/WatchlistContext'
+
+const MovieCard = ({ movie, showQuality = true }) => {
+  const { toggleWatchlist, isInWatchlist } = useWatchlist()
+  const [imageLoaded, setImageLoaded] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
+
+  const inWatchlist = isInWatchlist(movie._id)
+
+  const handleWatchlistClick = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    toggleWatchlist(movie)
+  }
+
+  const getQualityColor = (quality) => {
+    switch (quality) {
+      case '480p': return 'bg-yellow-100 text-yellow-700'
+      case '720p': return 'bg-green-100 text-green-700'
+      case '1080p': return 'bg-blue-100 text-blue-700'
+      case '4K': return 'bg-purple-100 text-purple-700'
+      default: return 'bg-gray-100 text-gray-700'
+    }
+  }
+
+  const getLanguageColor = (language) => {
+    switch (language) {
+      case 'Telugu': return 'bg-orange-100 text-orange-700'
+      case 'Tamil': return 'bg-red-100 text-red-700'
+      case 'Hindi': return 'bg-green-100 text-green-700'
+      case 'English': return 'bg-blue-100 text-blue-700'
+      case 'Dubbed': return 'bg-purple-100 text-purple-700'
+      default: return 'bg-gray-100 text-gray-700'
+    }
+  }
+
+  return (
+    <Link
+      to={`/movie/${movie._id}`}
+      className="group block"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div className="card card-hover relative overflow-hidden">
+        {/* Poster Image */}
+        <div className="relative aspect-[2/3] overflow-hidden bg-gray-100">
+          {!imageLoaded && (
+            <div className="absolute inset-0 skeleton-shimmer" />
+          )}
+          <img
+            src={movie.posterUrl}
+            alt={movie.title}
+            className={`w-full h-full object-cover transition-transform duration-500 ${
+              isHovered ? 'scale-110' : 'scale-100'
+            } ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+            onLoad={() => setImageLoaded(true)}
+          />
+          
+          {/* Overlay on Hover */}
+          <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-opacity duration-300 ${
+            isHovered ? 'opacity-100' : 'opacity-0'
+          }`}>
+            <div className="absolute bottom-0 left-0 right-0 p-4">
+              <div className="flex items-center justify-between">
+                <button className="flex items-center space-x-1 bg-white/20 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg hover:bg-white/30 transition-colors">
+                  <Eye className="w-4 h-4" />
+                  <span className="text-sm font-medium">View Details</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Watchlist Button */}
+          <button
+            onClick={handleWatchlistClick}
+            className={`absolute top-3 right-3 p-2 rounded-full transition-all duration-200 ${
+              inWatchlist
+                ? 'bg-red-500 text-white shadow-lg'
+                : 'bg-white/90 text-gray-600 hover:bg-white hover:text-red-500'
+            }`}
+          >
+            <Heart className={`w-4 h-4 ${inWatchlist ? 'fill-current' : ''}`} />
+          </button>
+
+          {/* Featured Badge */}
+          {movie.isFeatured && (
+            <div className="absolute top-3 left-3">
+              <span className="badge bg-secondary-500 text-white">
+                Featured
+              </span>
+            </div>
+          )}
+
+          {/* Trending Badge */}
+          {movie.isTrending && (
+            <div className="absolute top-3 left-3">
+              <span className="badge bg-gradient-to-r from-orange-500 to-red-500 text-white">
+                Trending
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="p-4">
+          {/* Title */}
+          <h3 className="font-semibold text-gray-900 line-clamp-1 group-hover:text-primary-600 transition-colors">
+            {movie.title}
+          </h3>
+
+          {/* Meta Info */}
+          <div className="flex items-center space-x-2 mt-2">
+            <span className={`badge text-xs ${getLanguageColor(movie.language)}`}>
+              {movie.language}
+            </span>
+            <span className="text-xs text-gray-500">{movie.year}</span>
+          </div>
+
+          {/* Quality Tags */}
+          {showQuality && movie.downloadLinks && movie.downloadLinks.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {movie.downloadLinks.slice(0, 3).map((link, index) => (
+                <span
+                  key={index}
+                  className={`badge text-xs ${getQualityColor(link.quality)}`}
+                >
+                  {link.quality}
+                </span>
+              ))}
+              {movie.downloadLinks.length > 3 && (
+                <span className="badge text-xs bg-gray-100 text-gray-600">
+                  +{movie.downloadLinks.length - 3}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Download Count */}
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+            <div className="flex items-center space-x-1 text-sm text-gray-500">
+              <Download className="w-4 h-4" />
+              <span>{movie.downloadCount?.toLocaleString() || 0}</span>
+            </div>
+            <div className="text-sm text-gray-500">{movie.fileSize}</div>
+          </div>
+        </div>
+      </div>
+    </Link>
+  )
+}
+
+export default MovieCard
