@@ -8,9 +8,12 @@ import {
   FileText,
   Check,
   Tv,
-  Play,
   Clock,
-  Eye
+  Eye,
+  Grid,
+  List,
+  ChevronDown,
+  BarChart3
 } from 'lucide-react'
 import { useSeriesDetails, useRelatedMovies } from '../hooks/useMovies'
 import { useWatchlist } from '../contexts/WatchlistContext'
@@ -34,14 +37,22 @@ const SeriesDetails = () => {
   const [episodesError, setEpisodesError] = useState(null)
   const [downloadingEpisode, setDownloadingEpisode] = useState(null)
   const [renderError, setRenderError] = useState(null)
+  const [viewMode, setViewMode] = useState('grid') // 'grid' or 'list'
+  const [selectedSeason, setSelectedSeason] = useState(1)
+  const [expandedEpisode, setExpandedEpisode] = useState(null)
+
+  // Update selectedSeason when series data loads
+  useEffect(() => {
+    if (series && series.currentSeason) {
+      setSelectedSeason(series.currentSeason)
+    }
+  }, [series])
 
   // Add early debugging
   console.log('SeriesDetails - id:', id)
   console.log('SeriesDetails - series:', series)
   console.log('SeriesDetails - loading:', loading)
   console.log('SeriesDetails - error:', error)
-
-  try {
 
   const inWatchlist = isInWatchlist(id)
 
@@ -295,119 +306,252 @@ const SeriesDetails = () => {
               </div>
             </div>
 
-            {/* Episodes Section */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900">
-                  Episodes
-                  {series.currentSeason && series.seasons > 1 && (
-                    <span className="text-lg font-normal text-gray-600 ml-2">
-                      (Season {series.currentSeason})
-                    </span>
-                  )}
-                </h2>
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <Tv className="w-4 h-4" />
-                  <span>{episodes.length} Episodes</span>
-                </div>
-              </div>
-
-              {episodesLoading ? (
-                <div className="space-y-4">
-                  {[...Array(3)].map((_, i) => (
-                    <div key={i} className="animate-pulse">
-                      <div className="border border-gray-200 rounded-lg p-4">
-                        <div className="h-5 bg-gray-200 rounded w-1/4 mb-3"></div>
-                        <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                        <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+            {/* Enhanced Episodes Section */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              {/* Episodes Header */}
+              <div className="bg-gradient-to-r from-primary-50 to-secondary-50 p-6 border-b border-gray-200">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Episodes</h2>
+                    <div className="flex items-center space-x-4 text-sm text-gray-600">
+                      <div className="flex items-center space-x-1">
+                        <Tv className="w-4 h-4" />
+                        <span>{episodes.length} Episodes</span>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              ) : episodesError ? (
-                <div className="text-center py-8">
-                  <p className="text-red-600 mb-4">Failed to load episodes</p>
-                  <button 
-                    onClick={() => window.location.reload()}
-                    className="btn-primary"
-                  >
-                    Try Again
-                  </button>
-                </div>
-              ) : episodes.length === 0 ? (
-                <div className="text-center py-8">
-                  <Tv className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Episodes Available</h3>
-                  <p className="text-gray-600">This series doesn't have any episodes yet.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {episodes.map((episode, index) => (
-                    <div 
-                      key={episode._id || index}
-                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-2">
-                            <h3 className="font-semibold text-gray-900">
-                              Episode {episode.episodeNumber}
-                            </h3>
-                            {episode.duration && (
-                              <span className="flex items-center space-x-1 text-sm text-gray-600">
-                                <Clock className="w-4 h-4" />
-                                <span>{episode.duration}</span>
-                              </span>
-                            )}
-                          </div>
-                          <h4 className="text-gray-800 mb-2">{episode.title}</h4>
-                        </div>
-                      </div>
-
-                      {/* Download Links */}
-                      {episode.downloadLinks && episode.downloadLinks.length > 0 && (
-                        <div className="space-y-2">
-                          {episode.downloadLinks.map((link, linkIndex) => (
-                            <div 
-                              key={linkIndex}
-                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                            >
-                              <div className="flex items-center space-x-3">
-                                <span className={`badge text-xs ${getQualityColor(link.quality)}`}>
-                                  {link.quality}
-                                </span>
-                                <span className="text-sm text-gray-600">HD Quality</span>
-                              </div>
-                              
-                              <button
-                                onClick={() => handleDownload(episode.episodeNumber, link)}
-                                disabled={downloadingEpisode === `${episode.episodeNumber}-${link.quality}`}
-                                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-white text-sm font-medium transition-colors ${
-                                  downloadingEpisode === `${episode.episodeNumber}-${link.quality}`
-                                    ? 'bg-gray-400 cursor-not-allowed'
-                                    : getQualityColor(link.quality)
-                                }`}
-                              >
-                                {downloadingEpisode === `${episode.episodeNumber}-${link.quality}` ? (
-                                  <>
-                                    <Check className="w-4 h-4" />
-                                    <span>Downloaded</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Download className="w-4 h-4" />
-                                    <span>Download</span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          ))}
+                      {series.seasons > 1 && (
+                        <div className="flex items-center space-x-1">
+                          <BarChart3 className="w-4 h-4" />
+                          <span>{series.seasons} Seasons</span>
                         </div>
                       )}
                     </div>
-                  ))}
+                  </div>
+                  
+                  {/* View Controls */}
+                  <div className="flex items-center space-x-2">
+                    {series.seasons > 1 && (
+                      <div className="relative">
+                        <select
+                          value={selectedSeason}
+                          onChange={(e) => setSelectedSeason(parseInt(e.target.value))}
+                          className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm font-medium focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        >
+                          {[...Array(series.seasons)].map((_, i) => (
+                            <option key={i + 1} value={i + 1}>
+                              Season {i + 1}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center bg-white border border-gray-300 rounded-lg">
+                      <button
+                        onClick={() => setViewMode('grid')}
+                        className={`p-2 rounded-l-lg transition-colors ${
+                          viewMode === 'grid' 
+                            ? 'bg-primary-500 text-white' 
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        <Grid className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setViewMode('list')}
+                        className={`p-2 rounded-r-lg transition-colors ${
+                          viewMode === 'list' 
+                            ? 'bg-primary-500 text-white' 
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        <List className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              )}
+              </div>
+
+              {/* Episodes Content */}
+              <div className="p-6">
+                {episodesLoading ? (
+                  <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 gap-6' : 'space-y-4'}>
+                    {[...Array(4)].map((_, i) => (
+                      <div key={i} className="animate-pulse">
+                        <div className={`border border-gray-200 rounded-xl overflow-hidden ${
+                          viewMode === 'grid' ? '' : 'flex'
+                        }`}>
+                          <div className={`bg-gray-200 ${
+                            viewMode === 'grid' ? 'h-48' : 'w-32 h-24'
+                          }`} />
+                          <div className="p-4 flex-1">
+                            <div className="h-5 bg-gray-200 rounded w-1/3 mb-3"></div>
+                            <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : episodesError ? (
+                  <div className="text-center py-12">
+                    <div className="text-red-500 mb-4">
+                      <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Failed to Load Episodes</h3>
+                    <p className="text-gray-600 mb-4">There was an error loading the episodes. Please try again.</p>
+                    <button 
+                      onClick={() => window.location.reload()}
+                      className="btn-primary"
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                ) : episodes.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Tv className="w-16 h-16 mx-auto text-gray-400 mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Episodes Available</h3>
+                    <p className="text-gray-600">This series doesn't have any episodes yet.</p>
+                  </div>
+                ) : (
+                  <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 gap-6' : 'space-y-4'}>
+                    {episodes.map((episode, index) => (
+                      <div 
+                        key={episode._id || index}
+                        className={`group border border-gray-200 rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300 bg-white ${
+                          viewMode === 'grid' ? '' : 'flex'
+                        }`}
+                      >
+                        {/* Episode Thumbnail */}
+                        <div className={`relative bg-gradient-to-br from-primary-100 to-secondary-100 ${
+                          viewMode === 'grid' ? 'h-48' : 'w-32 h-24 flex-shrink-0'
+                        }`}>
+                          <img
+                            src={series.posterUrl || 'https://via.placeholder.com/400x600'}
+                            alt={episode.title}
+                            className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity"
+                            onError={(e) => {
+                              e.target.style.display = 'none'
+                            }}
+                          />
+                          
+                          {/* Episode Number Overlay */}
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                            <div className="text-center">
+                              <div className="text-white font-bold text-2xl">
+                                {episode.episodeNumber}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Episode Info */}
+                        <div className="p-4 flex-1">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <h3 className="font-bold text-gray-900 mb-1">
+                                Episode {episode.episodeNumber}
+                              </h3>
+                              <h4 className="text-gray-800 text-sm mb-2 line-clamp-2">
+                                {episode.title}
+                              </h4>
+                            </div>
+                          </div>
+
+                          {/* Episode Meta */}
+                          <div className="flex items-center space-x-3 text-xs text-gray-600 mb-3">
+                            {episode.duration && (
+                              <div className="flex items-center space-x-1">
+                                <Clock className="w-3 h-3" />
+                                <span>{episode.duration}</span>
+                              </div>
+                            )}
+                            {episode.airDate && (
+                              <div className="flex items-center space-x-1">
+                                <Calendar className="w-3 h-3" />
+                                <span>{new Date(episode.airDate).toLocaleDateString()}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Download Buttons */}
+                          <div className="space-y-2">
+                            {episode.downloadLinks && episode.downloadLinks.length > 0 && (
+                              <div className="flex flex-wrap gap-2">
+                                {episode.downloadLinks.slice(0, 2).map((link, linkIndex) => (
+                                  <button
+                                    key={linkIndex}
+                                    onClick={() => handleDownload(episode.episodeNumber, link)}
+                                    disabled={downloadingEpisode === `${episode.episodeNumber}-${link.quality}`}
+                                    className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-white text-xs font-medium transition-all ${
+                                      downloadingEpisode === `${episode.episodeNumber}-${link.quality}`
+                                        ? 'bg-gray-400 cursor-not-allowed'
+                                        : getQualityColor(link.quality)
+                                    } hover:scale-105`}
+                                  >
+                                    {downloadingEpisode === `${episode.episodeNumber}-${link.quality}` ? (
+                                      <>
+                                        <Check className="w-3 h-3" />
+                                        <span>Downloaded</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Download className="w-3 h-3" />
+                                        <span>{link.quality}</span>
+                                      </>
+                                    )}
+                                  </button>
+                                ))}
+                                
+                                {episode.downloadLinks.length > 2 && (
+                                  <button
+                                    onClick={() => setExpandedEpisode(
+                                      expandedEpisode === episode.episodeNumber ? null : episode.episodeNumber
+                                    )}
+                                    className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-xs font-medium hover:bg-gray-200 transition-colors"
+                                  >
+                                    <span>+{episode.downloadLinks.length - 2}</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Expanded Download Options */}
+                          {expandedEpisode === episode.episodeNumber && episode.downloadLinks && episode.downloadLinks.length > 2 && (
+                            <div className="mt-3 pt-3 border-t border-gray-200">
+                              <p className="text-xs text-gray-600 mb-2">All qualities:</p>
+                              <div className="flex flex-wrap gap-2">
+                                {episode.downloadLinks.map((link, linkIndex) => (
+                                  <button
+                                    key={linkIndex}
+                                    onClick={() => handleDownload(episode.episodeNumber, link)}
+                                    disabled={downloadingEpisode === `${episode.episodeNumber}-${link.quality}`}
+                                    className={`flex items-center space-x-1 px-2 py-1 rounded text-white text-xs font-medium transition-all ${
+                                      downloadingEpisode === `${episode.episodeNumber}-${link.quality}`
+                                        ? 'bg-gray-400 cursor-not-allowed'
+                                        : getQualityColor(link.quality)
+                                    }`}
+                                  >
+                                    {downloadingEpisode === `${episode.episodeNumber}-${link.quality}` ? (
+                                      <Check className="w-3 h-3" />
+                                    ) : (
+                                      <Download className="w-3 h-3" />
+                                    )}
+                                    <span>{link.quality}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -481,20 +625,6 @@ const SeriesDetails = () => {
       </div>
     </div>
   )
-  } catch (err) {
-    console.error('SeriesDetails render error:', err)
-    setRenderError(err.message)
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-600 text-lg font-medium">Render Error: {err.message}</p>
-          <Link to="/" className="text-primary-600 hover:text-primary-700 mt-4 inline-block">
-            ← Back to Home
-          </Link>
-        </div>
-      </div>
-    )
-  }
 }
 
 export default SeriesDetails
