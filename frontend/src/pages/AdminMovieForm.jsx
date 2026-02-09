@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, Plus, X, Upload, Film, Check } from 'lucide-react'
 import { useMovie, createMovie, updateMovie } from '../hooks/useMovies'
 import { useNotificationEvent } from '../context/NotificationEventContext'
+import { convertGoogleDriveUrl, isGoogleDriveUrl, isPixeldrainUrl, isDirectVideoUrl, isVideoHostingUrl, getVideoType } from '../utils/urlConverters'
 
 const AdminMovieForm = () => {
   const { id } = useParams()
@@ -21,6 +22,8 @@ const AdminMovieForm = () => {
     year: new Date().getFullYear(),
     posterUrl: '',
     downloadLinks: [{ quality: '720p', url: '' }],
+    customDownloadLinks: [{ quality: '720p', url: '' }], // Array for custom download links with quality
+    separateMp4Link: { quality: '720p', url: '' }, // Separate direct MP4 link with quality
     description: '',
     fileSize: '',
     isTrending: false,
@@ -38,7 +41,7 @@ const AdminMovieForm = () => {
   const [success, setSuccess] = useState('')
 
   const languages = ['Telugu', 'Tamil', 'Hindi', 'English', 'Dubbed']
-  const categories = ['Movie', 'Web Series', 'TV Series', 'Dubbed']
+  const categories = ['Movie', 'TV Series', 'Dubbed']
   const genres = ['Action', 'Comedy', 'Romance', 'Thriller', 'Horror', 'Drama', 'Sci-Fi', 'Adventure']
   const qualities = ['480p', '720p', '1080p', '4K']
 
@@ -54,6 +57,12 @@ const AdminMovieForm = () => {
         downloadLinks: movie.downloadLinks?.length > 0 
           ? movie.downloadLinks 
           : [{ quality: '720p', url: '' }],
+        customDownloadLinks: movie.customDownloadLinks?.length > 0 
+          ? movie.customDownloadLinks 
+          : [{ quality: '720p', url: '' }],
+        separateMp4Link: movie.separateMp4Link 
+          ? { quality: movie.separateMp4Quality || '720p', url: movie.separateMp4Link }
+          : { quality: '720p', url: '' },
         description: movie.description || '',
         fileSize: movie.fileSize || '',
         isTrending: movie.isTrending || false,
@@ -98,6 +107,29 @@ const AdminMovieForm = () => {
     setFormData(prev => ({
       ...prev,
       downloadLinks: [...prev.downloadLinks, { quality: '720p', url: '' }]
+    }))
+  }
+
+  const handleCustomDownloadLinkChange = (index, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      customDownloadLinks: prev.customDownloadLinks.map((link, i) => 
+        i === index ? { ...link, [field]: value } : link
+      )
+    }))
+  }
+
+  const addCustomDownloadLink = () => {
+    setFormData(prev => ({
+      ...prev,
+      customDownloadLinks: [...prev.customDownloadLinks, { quality: '720p', url: '' }]
+    }))
+  }
+
+  const removeCustomDownloadLink = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      customDownloadLinks: prev.customDownloadLinks.filter((_, i) => i !== index)
     }))
   }
 
@@ -218,15 +250,18 @@ const AdminMovieForm = () => {
           if (!episode.title.trim()) {
             throw new Error(`Episode ${episode.episodeNumber} title is required`)
           }
-          const invalidEpisodeLinks = episode.downloadLinks.filter(link => !link.url.trim())
-          if (invalidEpisodeLinks.length > 0) {
-            throw new Error(`All download links for episode ${episode.episodeNumber} must have a URL`)
+          const validEpisodeLinks = episode.downloadLinks.filter(link => link.url.trim())
+          if (validEpisodeLinks.length === 0) {
+            throw new Error(`At least one download link for episode ${episode.episodeNumber} must have a URL`)
           }
         }
       } else {
-        // For movies, validate download links
-        const invalidLinks = formData.downloadLinks.filter(link => !link.url.trim())
-        if (invalidLinks.length > 0) throw new Error('All download links must have a URL')
+        // For movies, validate that at least one download link has a URL
+        const validLinks = formData.downloadLinks.filter(link => link.url.trim())
+        const hasSeparateMp4 = formData.separateMp4Link.url.trim()
+        if (validLinks.length === 0 && !hasSeparateMp4) {
+          throw new Error('At least one download link must have a URL (you can leave others empty)')
+        }
       }
 
       // Prepare data for submission
@@ -236,7 +271,23 @@ const AdminMovieForm = () => {
       
       // Only include relevant fields based on category
       if (formData.category === 'Movie') {
-        submissionData.downloadLinks = formData.downloadLinks.filter(link => link.url.trim())
+        // Convert Google Drive URLs to direct download URLs
+        submissionData.downloadLinks = formData.downloadLinks
+          .filter(link => link.url.trim())
+          .map(link => ({
+            ...link,
+            url: convertGoogleDriveUrl(link.url)
+          }))
+        
+        // Handle separate MP4 link
+        if (formData.separateMp4Link.url.trim()) {
+          submissionData.separateMp4Link = convertGoogleDriveUrl(formData.separateMp4Link.url)
+          submissionData.separateMp4Quality = formData.separateMp4Link.quality
+        } else {
+          delete submissionData.separateMp4Link
+          delete submissionData.separateMp4Quality
+        }
+        
         delete submissionData.episodes
         delete submissionData.totalEpisodes
         delete submissionData.seasons
@@ -245,10 +296,35 @@ const AdminMovieForm = () => {
         // For series, clean up episode data and remove movie-specific fields
         submissionData.episodes = formData.episodes.map(episode => ({
           ...episode,
-          downloadLinks: episode.downloadLinks.filter(link => link.url.trim())
+          downloadLinks: episode.downloadLinks
+            .filter(link => link.url.trim())
+            .map(link => ({
+              ...link,
+              url: convertGoogleDriveUrl(link.url)
+            }))
         }))
         delete submissionData.downloadLinks // Remove movie-level download links for series
         delete submissionData.fileSize // Remove fileSize for series
+        
+        // Handle separate MP4 link for series
+        if (formData.separateMp4Link.url.trim()) {
+          submissionData.separateMp4Link = convertGoogleDriveUrl(formData.separateMp4Link.url)
+          submissionData.separateMp4Quality = formData.separateMp4Link.quality
+        } else {
+          delete submissionData.separateMp4Link
+          delete submissionData.separateMp4Quality
+        }
+      }
+      
+      // Handle custom download links with Pixeldrain conversion
+      submissionData.customDownloadLinks = formData.customDownloadLinks
+        .filter(link => link.url.trim())
+        .map(link => ({
+          ...link,
+          url: convertPixeldrainUrl(link.url)
+        }))
+      if (submissionData.customDownloadLinks.length === 0) {
+        delete submissionData.customDownloadLinks
       }
 
       if (isEditMode) {
@@ -271,6 +347,7 @@ const AdminMovieForm = () => {
             year: new Date().getFullYear(),
             posterUrl: '',
             downloadLinks: [{ quality: '720p', url: '' }],
+            customDownloadLinks: [{ quality: '720p', url: '' }],
             description: '',
             fileSize: '',
             isTrending: false,
@@ -647,10 +724,44 @@ const AdminMovieForm = () => {
                                   type="url"
                                   value={link.url}
                                   onChange={(e) => handleEpisodeDownloadLinkChange(episodeIndex, linkIndex, 'url', e.target.value)}
-                                  placeholder="Google Drive share link"
+placeholder="Google Drive, direct MP4, Pixeldrain, or any download link"
                                   className="input text-sm"
                                   required
                                 />
+                                {getVideoType(link.url) && (
+                                  <div className={`mt-1 flex items-center space-x-2 text-xs ${
+                                    getVideoType(link.url) === 'Direct Video' ? 'text-blue-600' :
+                                    getVideoType(link.url) === 'Video Hosting' ? 'text-purple-600' :
+                                    getVideoType(link.url) === 'Pixeldrain' ? 'text-green-600' :
+                                    'text-gray-600'
+                                  }`}>
+                                    {getVideoType(link.url) === 'Direct Video' && (
+                                      <>
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span>Direct MP4 video</span>
+                                      </>
+                                    )}
+                                    {getVideoType(link.url) === 'Video Hosting' && (
+                                      <>
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                        </svg>
+                                        <span>Video hosting</span>
+                                      </>
+                                    )}
+                                    {getVideoType(link.url) === 'Pixeldrain' && (
+                                      <>
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span>Pixeldrain</span>
+                                      </>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                               {episode.downloadLinks.length > 1 && (
                                 <button
@@ -727,9 +838,62 @@ const AdminMovieForm = () => {
                         type="url"
                         value={link.url}
                         onChange={(e) => handleDownloadLinkChange(index, 'url', e.target.value)}
-                        placeholder="Google Drive share link"
+                        placeholder="Direct MP4, Google Drive, Pixeldrain, or any download link"
                         className="input"
                       />
+                      {getVideoType(link.url) && (
+                        <div className={`mt-2 flex items-center space-x-2 text-xs ${
+                          getVideoType(link.url) === 'Direct Video' ? 'text-blue-600' :
+                          getVideoType(link.url) === 'Video Hosting' ? 'text-purple-600' :
+                          getVideoType(link.url) === 'Google Drive' ? 'text-green-600' :
+                          getVideoType(link.url) === 'Pixeldrain' ? 'text-green-600' :
+                          'text-gray-600'
+                        }`}>
+                          {getVideoType(link.url) === 'Direct Video' && (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span>Direct MP4 video link detected</span>
+                            </>
+                          )}
+                          {getVideoType(link.url) === 'Video Hosting' && (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                              <span>Video hosting platform detected</span>
+                            </>
+                          )}
+                          {getVideoType(link.url) === 'Google Drive' && (
+                            <>
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M7.71 3.52L1.15 15.07c-.43.75-.13 1.66.5 2.31l1.9 3.32c.37.64.98 1.07 1.11 1.71.74l5.14-2.93c.64-.37 1.07-1.07 1.11-1.71l2.43-5.14c.43-.75.13-1.66-.5-2.31l-1.9-3.32c-.37-.64-.98-1.07-1.71-1.11z"/>
+                                <path d="M12 3v6l2-2M6 12l2-2M3 20.5a1.5 1.5 0 103 0 1.5 1.5 0 003 0z"/>
+                              </svg>
+                              <span>Google Drive link - will convert to direct download</span>
+                            </>
+                          )}
+                          {getVideoType(link.url) === 'Google Drive' && (
+                            <>
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M7.71 3.52L1.15 15.07c-.43.75-.13 1.66.5 2.31l1.9 3.32c.37.64.98 1.07 1.11 1.71.74l5.14-2.93c.64-.37 1.07-1.07 1.11-1.71l2.43-5.14c.43-.75.13-1.66-.5-2.31l-1.9-3.32c-.37-.64-.98-1.07-1.71-1.11z"/>
+                                <path d="M12 3v6l2-2M6 12l2-2M3 20.5a1.5 1.5 0 103 0 1.5 1.5 0 003 0z"/>
+                              </svg>
+                              <span>Google Drive link - will convert to direct download</span>
+                            </>
+                          )}
+                          {getVideoType(link.url) === 'Pixeldrain' && (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span>Pixeldrain URL - will convert to direct download</span>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
                     {formData.downloadLinks.length > 1 && (
                       <button
@@ -745,6 +909,189 @@ const AdminMovieForm = () => {
               </div>
             </div>
           )}
+
+          {/* Custom Download Links (for any download link with quality) */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Custom Download Links</h2>
+                <p className="text-sm text-gray-600 mt-1">Add direct MP4, Google Drive, Pixeldrain, or any download links with quality labels (optional)</p>
+              </div>
+              <button
+                type="button"
+                onClick={addCustomDownloadLink}
+                className="flex items-center space-x-2 text-primary-600 hover:text-primary-700 font-medium"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Add Link</span>
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              {formData.customDownloadLinks.map((link, index) => (
+                <div key={index} className="flex items-start space-x-4">
+                  <div className="w-32 flex-shrink-0">
+                    <select
+                      value={link.quality}
+                      onChange={(e) => handleCustomDownloadLinkChange(index, 'quality', e.target.value)}
+                      className="input"
+                    >
+                      {qualities.map(q => (
+                        <option key={q} value={q}>{q}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      type="url"
+                      value={link.url}
+                      onChange={(e) => handleCustomDownloadLinkChange(index, 'url', e.target.value)}
+                      placeholder="Direct MP4, Google Drive, Pixeldrain, or any download link"
+                      className="input"
+                    />
+                    {getVideoType(link.url) && (
+                      <div className={`mt-2 flex items-center space-x-2 text-xs ${
+                        getVideoType(link.url) === 'Direct Video' ? 'text-blue-600' :
+                        getVideoType(link.url) === 'Video Hosting' ? 'text-purple-600' :
+                        getVideoType(link.url) === 'Google Drive' ? 'text-green-600' :
+                        getVideoType(link.url) === 'Pixeldrain' ? 'text-green-600' :
+                        'text-gray-600'
+                      }`}>
+                        {getVideoType(link.url) === 'Direct Video' && (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>Direct MP4 video link detected</span>
+                          </>
+                        )}
+                        {getVideoType(link.url) === 'Video Hosting' && (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            <span>Video hosting platform detected</span>
+                          </>
+                        )}
+                        {getVideoType(link.url) === 'Pixeldrain' && (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>Pixeldrain URL - will convert to direct download</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {formData.customDownloadLinks.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeCustomDownloadLink(index)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Separate MP4 Link */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Separate MP4 Link</h2>
+              <p className="text-sm text-gray-600 mt-1">Add a direct MP4 download link (optional)</p>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="flex items-start space-x-4">
+                <div className="w-32 flex-shrink-0">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Quality
+                  </label>
+                  <select
+                    value={formData.separateMp4Link.quality}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      separateMp4Link: {
+                        ...prev.separateMp4Link,
+                        quality: e.target.value
+                      }
+                    }))}
+                    className="input"
+                  >
+                    {qualities.map(q => (
+                      <option key={q} value={q}>{q}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Direct MP4 Link
+                  </label>
+                  <input
+                    type="url"
+                    value={formData.separateMp4Link.url}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      separateMp4Link: {
+                        ...prev.separateMp4Link,
+                        url: e.target.value
+                      }
+                    }))}
+                    placeholder="https://example.com/video.mp4"
+                    className="input w-full"
+                  />
+                  {formData.separateMp4Link.url && getVideoType(formData.separateMp4Link.url) && (
+                  <div className={`mt-2 flex items-center space-x-2 text-xs ${
+                    getVideoType(formData.separateMp4Link.url) === 'Direct Video' ? 'text-blue-600' :
+                    getVideoType(formData.separateMp4Link.url) === 'Video Hosting' ? 'text-purple-600' :
+                    getVideoType(formData.separateMp4Link.url) === 'Google Drive' ? 'text-green-600' :
+                    getVideoType(formData.separateMp4Link.url) === 'Pixeldrain' ? 'text-green-600' :
+                    'text-gray-600'
+                  }`}>
+                    {getVideoType(formData.separateMp4Link.url) === 'Direct Video' && (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Direct MP4 video detected</span>
+                      </>
+                    )}
+                    {getVideoType(formData.separateMp4Link.url) === 'Google Drive' && (
+                      <>
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M7.71 3.52L1.15 15.07c-.43.75-.13 1.66.5 2.31l1.9 3.32c.37.64.98 1.07 1.11 1.71.74l5.14-2.93c.64-.37 1.07-1.07 1.11-1.71l2.43-5.14c.43-.75.13-1.66-.5-2.31l-1.9-3.32c-.37-.64-.98-1.07-1.71-1.11z"/>
+                          <path d="M12 3v6l2-2M6 12l2-2M3 20.5a1.5 1.5 0 103 0 1.5 1.5 0 003 0z"/>
+                        </svg>
+                        <span>Google Drive link - will be converted to direct download</span>
+                      </>
+                    )}
+                    {getVideoType(formData.separateMp4Link.url) === 'Pixeldrain' && (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <span>Pixeldrain link - will be converted to direct download</span>
+                      </>
+                    )}
+                    {getVideoType(formData.separateMp4Link.url) === 'Video Hosting' && (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Video hosting platform detected</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* Settings */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -808,6 +1155,7 @@ const AdminMovieForm = () => {
                 <span>{isEditMode ? 'Update Movie' : 'Create Movie'}</span>
               )}
             </button>
+          </div>
           </div>
         </form>
       </main>

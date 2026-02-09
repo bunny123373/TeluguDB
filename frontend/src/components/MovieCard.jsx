@@ -177,6 +177,8 @@ const MovieCard = ({ movie, showQuality = true, compact = false }) => {
               </span>
             </div>
           )}
+
+          
         </div>
 
         {/* Content */}

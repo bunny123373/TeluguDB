@@ -64,7 +64,7 @@ const FilterPanel = ({ filters, onFilterChange, categories }) => {
           >
             <option value="">All Categories</option>
             <option value="Movie">Movies</option>
-            <option value="Web Series">Web Series</option>
+            <option value="TV Series">TV Series</option>
             <option value="Dubbed">Dubbed</option>
           </select>
         </div>

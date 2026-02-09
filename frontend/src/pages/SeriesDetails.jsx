@@ -87,7 +87,7 @@ const SeriesDetails = () => {
       const a = document.createElement('a')
       a.href = link.url
       a.download = `${series.title}_S${series.currentSeason || 1}E${episodeNumber}_${link.quality}.mp4`
-      a.target = '_blank'
+      a.style.display = 'none'
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -604,6 +604,32 @@ const SeriesDetails = () => {
               </div>
             </div>
 
+            {/* Separate MP4 Link */}
+            {series.separateMp4Link && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                <h3 className="font-semibold text-gray-900 mb-4">Direct MP4 Download</h3>
+                <button
+                  onClick={() => {
+                    const a = document.createElement('a')
+                    a.href = series.separateMp4Link
+                    a.download = `${series.title}_${series.separateMp4Quality || '720p'}.mp4`
+                    a.style.display = 'none'
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                  }}
+                  className={`w-full flex flex-col items-center justify-center p-4 rounded-xl text-white transition-all duration-200 hover:shadow-lg hover:scale-105 ${getQualityColor(series.separateMp4Quality || '720p')}`}
+                >
+                  <Download className="w-6 h-6 mb-1" />
+                  <span className="font-semibold">Direct MP4</span>
+                  <span className="text-xs opacity-75">{series.separateMp4Quality || '720p'} Quality</span>
+                </button>
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  Direct MP4 file - {series.separateMp4Quality || '720p'} quality
+                </p>
+              </div>
+            )}
+
             {/* Related Content */}
             {relatedMovies && relatedMovies.length > 0 && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -624,7 +650,7 @@ const SeriesDetails = () => {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 export default SeriesDetails

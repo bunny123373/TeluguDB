@@ -4,8 +4,7 @@ import MovieSection from '../components/MovieSection'
 import FilterPanel from '../components/FilterPanel'
 import MetaTags from '../components/MetaTags'
 import MovieCard from '../components/MovieCard'
-import SeriesCard from '../components/SeriesCard'
-import { useMovies, useSeries } from '../hooks/useMovies'
+import { useMovies } from '../hooks/useMovies'
 import { useNewMovieNotifications } from '../hooks/useNewMovieNotifications'
 
 const Home = () => {
@@ -17,55 +16,28 @@ const Home = () => {
     year: '',
     quality: ''
   })
-  const [categories, setCategories] = useState([])
   const [categoryMovies, setCategoryMovies] = useState({})
 
-  // Fetch languages data
+  
+
+  // Fetch all movies
   useEffect(() => {
-    const fetchLanguages = async () => {
+    const fetchAllMovies = async () => {
       try {
-        const response = await fetch('/api/categories')
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+        const params = new URLSearchParams({ limit: 12 })
+        const response = await fetch(`${API_URL}/movies?${params}`)
         const data = await response.json()
-        setCategories(data.languages || [])
+        setCategoryMovies({ 'All': data.movies || [] })
+        console.log('Found', data.movies?.length || 0, 'movies')
       } catch (error) {
-        console.error('Error fetching languages:', error)
+        console.error('Error fetching all movies:', error)
+        setCategoryMovies({ 'All': [] })
       }
     }
-    fetchLanguages()
+
+    fetchAllMovies()
   }, [])
-
-  // Fetch movies for each language category
-  useEffect(() => {
-    const fetchLanguageMovies = async () => {
-      if (categories.length === 0) return
-      
-      const moviesData = {}
-      for (const language of categories) {
-        const { movies } = await fetchMoviesByLanguage(language)
-        moviesData[language] = movies
-      }
-      setCategoryMovies(moviesData)
-    }
-
-    fetchLanguageMovies()
-  }, [categories])
-
-  // Helper function to fetch movies by language
-  const fetchMoviesByLanguage = async (language) => {
-    try {
-      const params = new URLSearchParams({
-        language,
-        limit: '8'
-      })
-      
-      const response = await fetch(`/api/movies?${params}`)
-      const data = await response.json()
-      return { movies: data.movies || [] }
-    } catch (error) {
-      console.error(`Error fetching ${language} movies:`, error)
-      return { movies: [] }
-    }
-  }
 
   // Fetch latest movies for notifications
   const { 
@@ -77,23 +49,9 @@ const Home = () => {
   // Show notifications for new movies
   useNewMovieNotifications(latestMovies)
 
-  // Fetch trending movies for hero section
-  const { 
-    movies: trendingMovies, 
-    loading: trendingLoading, 
-    error: trendingError 
-  } = useMovies({ isTrending: 'true', limit: 6 })
-
-  // Fetch recent series
-  const { 
-    series: recentSeries, 
-    loading: seriesLoading, 
-    error: seriesError 
-  } = useSeries({ limit: 8 })
   
-  console.log('Home component - recentSeries:', recentSeries)
-  console.log('Home component - seriesLoading:', seriesLoading)
-  console.log('Home component - seriesError:', seriesError)
+
+  
 
   // Fetch category-filtered movies when a category is selected
   const { 
@@ -195,24 +153,15 @@ const Home = () => {
                 />
               ) : (
                 <>
-                  {/* Trending Section */}
-                  <MovieSection
-                    type="trending"
-                    movies={trendingMovies}
-                    loading={trendingLoading}
-                    error={trendingError}
-                    showViewAll={false}
-                  />
-
-                  {/* Recent Series Section */}
+                  {/* All Movies Section */}
                   <div className="mb-12">
                     <div className="flex items-center justify-between mb-6">
                       <div>
-                        <h2 className="text-2xl font-bold text-gray-900">Recent Series</h2>
-                        <p className="text-gray-600 mt-1">Latest web and TV series added</p>
+                        <h2 className="text-2xl font-bold text-gray-900">All Movies</h2>
+                        <p className="text-gray-600 mt-1">Browse our complete movie collection</p>
                       </div>
                       <a
-                        href="/series"
+                        href="/movies"
                         className="text-primary-600 hover:text-primary-700 font-medium flex items-center space-x-1"
                       >
                         <span>View All</span>
@@ -223,7 +172,7 @@ const Home = () => {
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                      {seriesLoading && recentSeries.length === 0 ? (
+                      {!categoryMovies['All'] ? (
                         [...Array(6)].map((_, i) => (
                           <div key={i} className="animate-pulse">
                             <div className="bg-gray-200 aspect-[2/3] rounded-lg mb-3"></div>
@@ -231,39 +180,21 @@ const Home = () => {
                             <div className="h-3 bg-gray-200 rounded w-3/4"></div>
                           </div>
                         ))
-                      ) : seriesError ? (
+                      ) : categoryMovies['All'].length === 0 ? (
                         <div className="col-span-full text-center py-8">
-                          <p className="text-red-600">Failed to load series</p>
-                        </div>
-                      ) : recentSeries.length === 0 && !seriesLoading ? (
-                        <div className="col-span-full text-center py-8">
-                          <p className="text-gray-500">No series available</p>
+                          <p className="text-gray-500">No movies available</p>
                         </div>
                       ) : (
-                        recentSeries.map((seriesItem) => (
-                          <SeriesCard 
-                            key={seriesItem._id} 
-                            series={seriesItem}
-                            showQuality={false}
+                        categoryMovies['All'].map((movie) => (
+                          <MovieCard 
+                            key={movie._id} 
+                            movie={movie}
+                            showQuality={true}
                           />
                         ))
                       )}
                     </div>
                   </div>
-
-                  {/* Language-wise Sections */}
-                  {categories.map((language) => (
-                    <MovieSection
-                      key={language}
-                      type={language.toLowerCase()}
-                      title={`${language} Movies`}
-                      movies={categoryMovies[language] || []}
-                      loading={!categoryMovies[language]}
-                      error={null}
-                      showViewAll={true}
-                      viewAllLink={`/movies?language=${encodeURIComponent(language)}`}
-                    />
-                  ))}
                 </>
               )}
             </main>

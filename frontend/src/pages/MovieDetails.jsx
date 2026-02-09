@@ -32,11 +32,11 @@ const MovieDetails = () => {
     // Increment download count
     await incrementDownloadCount(id)
     
-    // Trigger download
+    // Trigger direct download
     const a = document.createElement('a')
     a.href = link.url
     a.download = `${movie.title}_${link.quality}.mp4`
-    a.target = '_blank'
+    a.style.display = 'none'
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -240,31 +240,96 @@ const MovieDetails = () => {
               {/* Download Buttons */}
               <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Download Options</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {movie.downloadLinks?.map((link, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleDownload(link)}
-                      disabled={downloadingQuality === link.quality}
-                      className={`flex flex-col items-center justify-center p-4 rounded-xl text-white transition-all duration-200 ${getQualityColor(link.quality)} ${
-                        downloadingQuality === link.quality ? 'opacity-75 cursor-wait' : 'hover:shadow-lg hover:scale-105'
-                      }`}
-                    >
-                      {downloadingQuality === link.quality ? (
-                        <>
-                          <Check className="w-6 h-6 mb-1" />
-                          <span className="font-semibold">{link.quality}</span>
-                          <span className="text-xs opacity-75">Starting...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Download className="w-6 h-6 mb-1" />
-                          <span className="font-semibold">{link.quality}</span>
-                          <span className="text-xs opacity-75">Click to Download</span>
-                        </>
-                      )}
-                    </button>
-                  ))}
+                <div className="space-y-4">
+                  {/* Regular Download Links */}
+                  {movie.downloadLinks && movie.downloadLinks.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">Quality Downloads</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {movie.downloadLinks.map((link, index) => (
+                          <button
+                            key={index}
+                            onClick={() => handleDownload(link)}
+                            disabled={downloadingQuality === link.quality}
+                            className={`flex flex-col items-center justify-center p-4 rounded-xl text-white transition-all duration-200 ${getQualityColor(link.quality)} ${
+                              downloadingQuality === link.quality ? 'opacity-75 cursor-wait' : 'hover:shadow-lg hover:scale-105'
+                            }`}
+                          >
+                            {downloadingQuality === link.quality ? (
+                              <>
+                                <Check className="w-6 h-6 mb-1" />
+                                <span className="font-semibold">{link.quality}</span>
+                                <span className="text-xs opacity-75">Starting...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Download className="w-6 h-6 mb-1" />
+                                <span className="font-semibold">{link.quality}</span>
+                                <span className="text-xs opacity-75">Click to Download</span>
+                              </>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Custom Download Links */}
+                  {movie.customDownloadLinks && movie.customDownloadLinks.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">Custom Downloads</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {movie.customDownloadLinks.map((link, index) => (
+                          <button
+                            key={index}
+                            onClick={() => {
+                              const a = document.createElement('a')
+                              a.href = link.url
+                              a.target = '_blank'
+                              a.rel = 'noopener noreferrer'
+                              document.body.appendChild(a)
+                              a.click()
+                              document.body.removeChild(a)
+                            }}
+                            className={`flex flex-col items-center justify-center p-4 rounded-xl text-white transition-all duration-200 ${getQualityColor(link.quality)} hover:shadow-lg hover:scale-105`}
+                          >
+                            <Download className="w-6 h-6 mb-1" />
+                            <span className="font-semibold">{link.quality}</span>
+                            <span className="text-xs opacity-75">Custom Link</span>
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2 text-center">
+                        Custom download links
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Separate MP4 Link */}
+                  {movie.separateMp4Link && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">Direct MP4 Download</h4>
+                      <button
+                        onClick={() => {
+                          const a = document.createElement('a')
+                          a.href = movie.separateMp4Link
+                          a.download = `${movie.title}_${movie.separateMp4Quality || '720p'}.mp4`
+                          a.style.display = 'none'
+                          document.body.appendChild(a)
+                          a.click()
+                          document.body.removeChild(a)
+                        }}
+                        className={`w-full flex flex-col items-center justify-center p-4 rounded-xl text-white transition-all duration-200 hover:shadow-lg hover:scale-105 ${getQualityColor(movie.separateMp4Quality || '720p')}`}
+                      >
+                        <Download className="w-6 h-6 mb-1" />
+                        <span className="font-semibold">Direct MP4</span>
+                        <span className="text-xs opacity-75">{movie.separateMp4Quality || '720p'} Quality</span>
+                      </button>
+                      <p className="text-xs text-gray-500 mt-2 text-center">
+                        Direct MP4 file - {movie.separateMp4Quality || '720p'} quality
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
