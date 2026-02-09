@@ -28,6 +28,9 @@ router.get('/', async (req, res) => {
     if (isTrending === 'true') query.isTrending = true;
     if (isFeatured === 'true') query.isFeatured = true;
     
+    console.log('Movies API - Query parameters:', req.query);
+    console.log('Movies API - MongoDB query:', query);
+    
     if (search) {
       query.$or = [
         { title: { $regex: search, $options: 'i' } },
@@ -38,12 +41,15 @@ router.get('/', async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const movies = await Movie.find(query)
-      .select('title language category genre year posterUrl description fileSize downloadCount isTrending isFeatured createdAt')
+      .select('title language category genre year posterUrl description fileSize downloadCount isTrending isFeatured createdAt downloadLinks customDownloadLinks')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Math.min(parseInt(limit), 100)); // Cap at 100
 
     const total = await Movie.countDocuments(query);
+
+    console.log(`Movies API - Found ${movies.length} movies for query:`, query);
+    console.log('Movies API - Sample movies:', movies.slice(0, 3).map(m => ({ title: m.title, language: m.language })));
 
     res.json({
       movies,

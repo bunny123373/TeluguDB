@@ -8,7 +8,7 @@ const downloadLinkSchema = new mongoose.Schema({
   },
   url: {
     type: String,
-    required: true
+    required: false
   }
 });
 
@@ -50,7 +50,7 @@ const movieSchema = new mongoose.Schema({
   category: {
     type: String,
     required: true,
-    enum: ['Movie', 'Web Series', 'TV Series', 'Dubbed']
+    enum: ['Movie', 'TV Series', 'Dubbed']
   },
   genre: [{
     type: String,
@@ -65,6 +65,16 @@ const movieSchema = new mongoose.Schema({
     required: true
   },
   downloadLinks: [downloadLinkSchema],
+  customDownloadLinks: [downloadLinkSchema],
+  separateMp4Link: {
+    type: String,
+    required: false
+  },
+  separateMp4Quality: {
+    type: String,
+    enum: ['480p', '720p', '1080p', '4K'],
+    required: false
+  },
   description: {
     type: String,
     required: true
